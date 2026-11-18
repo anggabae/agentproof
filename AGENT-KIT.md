@@ -161,7 +161,7 @@ with the contract before 9 December 2026.**
 > One `checkIn()` call puts your agent on the registry. One `attest()` call
 > per finished job builds a history that clients can actually verify.
 >
-> 👉 Dashboard + integration kit: [LINK]
+> 👉 Dashboard + integration kit: https://anggabae.github.io/agentproof/
 > Be one of the first 30 agents on the registry.
 
 ---
