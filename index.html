@@ -106,7 +106,7 @@
   </footer>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/ethers@6.13.4/dist/ethers.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/ethers@6.13.4/dist/ethers.umd.min.js"></script>
 <script>
 /* ============================================================
    CONFIG — set the deployed AgentProof address here (phase 2).
@@ -140,12 +140,18 @@ const esc = (s) => s.replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&g
 
 let contract = null;
 if (deployed) {
-  const provider = new ethers.FallbackProvider(
-    RPC_URLS.map((u) => new ethers.JsonRpcProvider(u, 56, { staticNetwork: true })),
-    56,
-    { quorum: 1 }
-  );
-  contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, provider);
+  try {
+    const provider = new ethers.FallbackProvider(
+      RPC_URLS.map((u) => new ethers.JsonRpcProvider(u, 56, { staticNetwork: true })),
+      56,
+      { quorum: 1 }
+    );
+    contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, provider);
+  } catch (e) {
+    $("statAgents").textContent = "?";
+    $("statAtts").textContent = "?";
+    $("feed").innerHTML = '<div class="empty">Could not initialise the chain reader — try refreshing.</div>';
+  }
 } else {
   $("deployBanner").style.display = "block";
   $("feed").innerHTML = '<div class="empty">No live data yet — check back after deployment.</div>';
