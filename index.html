@@ -114,7 +114,11 @@
    and skips all chain reads.
    ============================================================ */
 const CONTRACT_ADDRESS = "0x4A144eEADf786541D61EB94575c015C37F5f9105"; // <-- paste the deployed AgentProof address here after deployment
-const RPC_URL = "https://bsc-dataseed.binance.org"; // public BNB Smart Chain RPC (read-only)
+const RPC_URLS = [
+  "https://bsc-rpc.publicnode.com",
+  "https://bsc-dataseed.binance.org",
+  "https://bsc-dataseed1.defibit.io",
+]; // public BNB Smart Chain RPCs (read-only; page falls back across endpoints)
 
 const ABI = [
   "function totalAgents() view returns (uint256)",
@@ -136,7 +140,11 @@ const esc = (s) => s.replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&g
 
 let contract = null;
 if (deployed) {
-  const provider = new ethers.JsonRpcProvider(RPC_URL);
+  const provider = new ethers.FallbackProvider(
+    RPC_URLS.map((u) => new ethers.JsonRpcProvider(u, 56, { staticNetwork: true })),
+    56,
+    { quorum: 1 }
+  );
   contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, provider);
 } else {
   $("deployBanner").style.display = "block";
@@ -146,7 +154,11 @@ if (deployed) {
 async function loadStats() {
   if (!contract) return;
   try {
-    const [agents, atts] = await Promise.all([contract.totalAgents(), contract.totalAttestations()]);
+    const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error("rpc timeout")), 15000));
+    const [agents, atts] = await Promise.race([
+      Promise.all([contract.totalAgents(), contract.totalAttestations()]),
+      timeout,
+    ]);
     $("statAgents").textContent = agents.toString();
     $("statAtts").textContent = atts.toString();
   } catch (e) {
@@ -160,16 +172,25 @@ async function loadFeed() {
   const feed = $("feed");
   try {
     const provider = contract.runner.provider;
-    const latest = await provider.getBlockNumber();
+    const latest = await Promise.race([
+      provider.getBlockNumber(),
+      new Promise((_, rej) => setTimeout(() => rej(new Error("rpc timeout")), 15000)),
+    ]);
     const filter = contract.filters.Attested();
     const found = [];
     const CHUNK = 5000, MAX_SCAN = 60000;
     for (let end = latest; end > Math.max(0, latest - MAX_SCAN) && found.length < 20; end -= CHUNK) {
       const start = Math.max(0, end - CHUNK + 1);
       try {
-        const logs = await contract.queryFilter(filter, start, end);
+        const logs = await Promise.race([
+          contract.queryFilter(filter, start, end),
+          new Promise((_, rej) => setTimeout(() => rej(new Error("rpc timeout")), 20000)),
+        ]);
         found.unshift(...logs);
-      } catch (e) { /* public RPC range limits — keep scanning smaller windows */ }
+      } catch (e) {
+        if (e && e.message === "rpc timeout" && found.length === 0) throw e; // dead RPC — bail to the error message
+        /* otherwise: public RPC range limits — keep scanning smaller windows */
+      }
     }
     const items = found.slice(-20).reverse();
     if (!items.length) {
